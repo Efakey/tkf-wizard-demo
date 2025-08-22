@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>The Key Financial — Wizard Demo</title>
+<style>
+:root{ --primary:#043d44; --accent:#f3b600; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+body{ margin:0; background:#fff; color:#0f172a; }
+header{ background:linear-gradient(90deg, var(--primary), #065a61); color:white; padding:12px 16px; display:flex; align-items:center; gap:12px; }
+.badge{ background:var(--accent); color:#111; padding:2px 8px; border-radius:6px; font-size:12px; font-weight:600; }
+.container{ max-width:1100px; margin:0 auto; padding:16px; }
+.card{ background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:16px; box-shadow: 0 1px 2px rgba(0,0,0,.04); margin-bottom:12px; }
+.row{ display:grid; grid-template-columns: repeat(12, 1fr); gap:10px; }
+.input, select, textarea{ width:100%; padding:8px 10px; border:1px solid #d1d5db; border-radius:8px; }
+.btn{ padding:10px 14px; border-radius:10px; border:1px solid #cbd5e1; background:#f8fafc; cursor:pointer; }
+.btn-primary{ background:var(--primary); color:#fff; border-color:transparent; }
+.btn:disabled{ opacity:.5; cursor:not-allowed; }
+.stepper{ display:flex; flex-wrap:wrap; gap:8px; margin:8px 0 12px; }
+.stepper button{ padding:6px 10px; border:1px solid #cbd5e1; border-radius:10px; font-size:12px; }
+.stepper button[aria-current="step"]{ background:#0f172a; color:#fff; }
+.grid3{ display:grid; grid-template-columns: repeat(3, 1fr); gap:12px; }
+label.block{ display:block; font-weight:600; margin-bottom:4px; }
+:focus-visible{ outline:3px solid var(--accent); outline-offset:2px; }
+.logo{
+  width:40px;height:40px; border-radius:8px; display:inline-grid; place-items:center;
+  background:var(--primary); color:white; font-weight:800; letter-spacing:.5px;
+}
+</style>
+</head>
+<body>
+  <header>
+    <!-- Inline “logo” (no file needed). Replace the TKF letters if you want. -->
+    <div class="logo" aria-hidden="true">TKF</div>
+    <div style="font-weight:700">The Key Financial</div>
+    <span class="badge">Presentation Wizard — Demo</span>
+  </header>
+
+  <main class="container">
+    <div class="stepper" id="steps"></div>
+
+    <section class="card step" data-title="Personal">
+      <h2>Personal</h2>
+      <div class="row">
+        <div style="grid-column: span 6"><label class="block">Name</label><input class="input" id="name"/></div>
+        <div style="grid-column: span 6"><label class="block">Date</label><input class="input" type="date" id="date"/></div>
+        <div style="grid-column: span 6"><label class="block">Birthdate</label><input class="input" type="date" id="birthdate"/></div>
+        <div style="grid-column: span 6"><label class="block">Age</label><input class="input" type="number" id="age"/></div>
+        <div style="grid-column: span 12"><label class="block">Address</label><input class="input" id="address"/></div>
+      </div>
+    </section>
+
+    <section class="card step" data-title="Advisors">
+      <h2>Advisors</h2>
+      <div class="row">
+        <div style="grid-column: span 6"><label class="block">Attorney</label><input class="input" id="attorney"/></div>
+        <div style="grid-column: span 6"><label class="block">Accountant</label><input class="input" id="accountant"/></div>
+      </div>
+    </section>
+
+    <section class="card step" data-title="Insurance">
+      <h2>Insurance</h2>
+      <div class="row">
+        <div style="grid-column: span 4"><label class="block">Company</label><input class="input" id="ins_company"/></div>
+        <div style="grid-column: span 4"><label class="block">Death Benefit</label><input class="input" type="number" id="ins_db"/></div>
+        <div style="grid-column: span 4"><label class="block">Cash Value</label><input class="input" type="number" id="ins_cv"/></div>
+      </div>
+    </section>
+
+    <section class="card step" data-title="Options">
+      <h2>Options</h2>
+      <div id="options-list"></div>
+      <button class="btn" id="add-option">+ Add option</button>
+      <div id="options-cards" style="margin-top:12px"></div>
+    </section>
+
+    <section class="card step" data-title="Review">
+      <h2>Review & Export</h2>
+      <p>Preview your entries below. You can also export a one-page PDF.</p>
+      <pre id="preview" style="white-space:pre-wrap; background:#f8fafc; padding:12px; border-radius:8px; border:1px solid #e5e7eb;"></pre>
+      <button class="btn btn-primary" id="export">Export PDF</button>
+    </section>
+
+    <div style="display:flex; justify-content:space-between; margin-top:12px">
+      <button class="btn" id="prev">← Back</button>
+      <button class="btn btn-primary" id="next">Next →</button>
+    </div>
+  </main>
+
+  <!-- jsPDF for PDF export -->
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <script>
+  const steps = Array.from(document.querySelectorAll('.step'));
+  const stepper = document.getElementById('steps');
+  let idx = 0;
+  const state = Object.assign({ options: [] }, JSON.parse(localStorage.getItem('tkf-pages-demo') || '{}'));
+
+  function renderStepper(){
+    stepper.innerHTML = '';
+    steps.forEach((s, i)=>{
+      const b = document.createElement('button');
+      b.textContent = (i+1)+'. '+ s.dataset.title;
+      if (i===idx) b.setAttribute('aria-current','step'); else b.removeAttribute('aria-current');
+      b.onclick = ()=>{ idx = i; showStep(); };
+      stepper.appendChild(b);
+    });
+  }
+  function showStep(){
+    steps.forEach((s, i)=> s.style.display = i===idx ? 'block' : 'none');
+    renderCards(); renderStepper(); updatePreview();
+  }
+  function bindInputs(){
+    const map = ['name','date','birthdate','age','address','attorney','accountant','ins_company','ins_db','ins_cv'];
+    map.forEach(id=>{
+      const el = document.getElementById(id);
+      if (!el) return;
+      if (state[id] !== undefined) el.value = state[id];
+      el.addEventListener('input', ()=>{
+        state[id] = el.type==='number' ? Number(el.value) : el.value;
+        save(); updatePreview();
+      });
+    });
+  }
+  function save(){ localStorage.setItem('tkf-pages-demo', JSON.stringify(state)); }
+
+  function optionRow(o, i){
+    const wrap = document.createElement('div');
+    wrap.className = 'card';
+    wrap.innerHTML = `
+      <div class="row">
+        <div style="grid-column: span 6">
+          <label class="block">Name</label>
+          <input class="input" value="${o.name||''}" data-k="name"/>
+        </div>
+        <div style="grid-column: span 6">
+          <label class="block">Risk</label>
+          <select class="input" data-k="risk">
+            <option ${o.risk==='Low'?'selected':''}>Low</option>
+            <option ${o.risk==='Medium'?'selected':''}>Medium</option>
+            <option ${o.risk==='High'?'selected':''}>High</option>
+          </select>
+        </div>
+        <div style="grid-column: span 12">
+          <label class="block">Guarantees</label>
+          <textarea class="input" data-k="guarantees">${o.guarantees||''}</textarea>
+        </div>
+        <div style="grid-column: span 12">
+          <label class="block">Results / Notes</label>
+          <textarea class="input" data-k="resultSummary">${o.resultSummary||''}</textarea>
+        </div>
+        <div style="grid-column: span 12">
+          <label class="block">Score: <span class="score">${o.score||5}</span></label>
+          <input type="range" min="1" max="10" value="${o.score||5}" data-k="score"/>
+        </div>
+      </div>`;
+    wrap.querySelectorAll('[data-k]').forEach(inp=>{
+      inp.addEventListener('input', ()=>{
+        const k = inp.getAttribute('data-k');
+        if (k==='score') o[k] = Number(inp.value);
+        else if (k==='risk') o[k] = inp.value;
+        else o[k] = inp.value;
+        wrap.querySelector('.score').textContent = String(o.score||5);
+        save(); renderCards(); updatePreview();
+      });
+    });
+    return wrap;
+  }
+  function renderOptions(){
+    const list = document.getElementById('options-list');
+    list.innerHTML = '';
+    state.options.forEach((o, i)=> list.appendChild(optionRow(o, i)) );
+  }
+  function renderCards(){
+    const wrap = document.getElementById('options-cards');
+    if (!state.options.length) { wrap.innerHTML=''; return; }
+    wrap.innerHTML = '<div class="grid3">' + state.options.map(o=>`
+      <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:center">
+          <div style="font-weight:600">${o.name||'Unnamed Option'}</div>
+          <span class="badge">${o.risk||'Medium'}</span>
+        </div>
+        <div><strong>Guarantees:</strong> ${o.guarantees||'—'}</div>
+        <div><strong>Results:</strong> ${o.resultSummary||'—'}</div>
+        <div><strong>Score:</strong> ${o.score||5}/10</div>
+      </div>
+    `).join('') + '</div>';
+  }
+  function updatePreview(){
+    const pv = document.getElementById('preview');
+    if (!pv) return;
+    const summary = {
+      name: state.name||'', date: state.date||'',
+      options: (state.options||[]).map(o=>({name:o.name||'', risk:o.risk||'Medium', score:o.score||5}))
+    };
+    pv.textContent = JSON.stringify(summary, null, 2);
+  }
+
+  document.getElementById('add-option').onclick = ()=>{
+    state.options.push({ name:'', risk:'Medium', guarantees:'', resultSummary:'', score:5 });
+    save(); renderOptions(); renderCards();
+  };
+  document.getElementById('prev').onclick = ()=>{ idx = Math.max(0, idx-1); showStep(); };
+  document.getElementById('next').onclick = ()=>{ idx = Math.min(steps.length-1, idx+1); showStep(); };
+  document.getElementById('export').onclick = ()=>{
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+    doc.setFontSize(18);
+    doc.text('The Key Financial — Client Review', 14, 18);
+    doc.setFontSize(12);
+    doc.text(`Client: ${state.name||''}`, 14, 28);
+    doc.text(`Date: ${state.date||''}`, 14, 34);
+    doc.text('Options:', 14, 46);
+    (state.options||[]).slice(0,3).forEach((o, i)=> {
+      doc.text(`${i+1}. ${o.name||'Option'} — Risk: ${o.risk||'Medium'} — Score: ${o.score||5}`, 14, 54 + i*8);
+    });
+    doc.save(`Client_Review_${(state.name||'Client').replace(/\s+/g,'_')}.pdf`);
+  };
+
+  // init
+  renderStepper(); bindInputs(); renderOptions(); renderCards(); showStep();
+  </script>
+</body>
+</html>
